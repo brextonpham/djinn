@@ -4,7 +4,9 @@ import re
 import numpy as np 
 import collections
 import sqlite3
-import porterstemmer
+from porterstemmer import PorterStemmer
+from nltk.corpus import wordnet as wn
+from PyDictionary import PyDictionary
 
 #############################################################################
 # Chatbot						                            				#
@@ -15,9 +17,12 @@ class Chatbot:
 	def __init__(self):
 		self.name = 'Djinn'
 		self.porter_stemmer = PorterStemmer()
+		self.dictionary = PyDictionary()
 		self.determiner_tags = ['WDT', 'WP', 'WRB']
 		self.entity_tags = ['NN', 'NNP', 'NNPS', 'NNS']
 		self.table_names = []
+
+		###have database somewhere that will store synonyms###
 
 		###gather set for tables###
 		self.column_names = [name.lower() for name in self.retrieve_column_names()]		
@@ -68,8 +73,10 @@ class Chatbot:
 		#Get columns
 		num_fields = len(cursor.description) 
 		field_names = [i[0] for i in cursor.description]
-		return field_names
+
 		conn.close()
+
+		return field_names
 
 	def pos_extraction(self, userInput):
 		"""Retrieves the tags of each token in the input string and returns a list of tagged tokens."""		
@@ -120,11 +127,35 @@ class Chatbot:
 
 	def stem_user_input(self, userInputTokens):
 		return [self.porter_stemmer.stem(word) for word in userInputTokens]
+
+	def extract_tagged_antecedent(self, word):
+		return str(word[:len(word)])
+
+	def find_synonyms(self, word):
+		return [self.extract_tagged_antecedent(w) for w in self.dictionary.synonym(word)]	
 	
 	def find_closest_name(self, w1, names_list):
+		###need to find hypernyms/hyponyms eventually####
+		possible_entity_titles_list = [w1[0]] + self.find_synonyms(w1[0])
 
-		dl_distance_list = [self.dameraulevenshtein(w1[0], w2) for w2 in names_list]
-		return names_list[dl_distance_list.index(min(dl_distance_list))]
+		###BRUTE FORCE BE BETTER BREXTON###
+		word_with_min_distance = "" 
+		min_distance = self.dameraulevenshtein(possible_entity_titles_list[0], names_list[0])
+		for word in possible_entity_titles_list:
+			for name in names_list:
+				distance = self.dameraulevenshtein(word, name)
+				if distance <= min_distance:
+					word_with_min_distance = name
+					min_distance = distance
+
+		return word_with_min_distance
+
+
+		#stems and then finds distances
+		# dl_distance_list = [self.dameraulevenshtein(self.porter_stemmer.stem(w1[0]), self.porter_stemmer.stem(w2)) for w2 in names_list]
+		# return names_list[dl_distance_list.index(min(dl_distance_list))]
+
+
 
 if __name__ == '__main__':
 	Chatbot()
