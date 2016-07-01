@@ -19,7 +19,7 @@ class Chatbot:
 		self.porter_stemmer = PorterStemmer()
 		self.dictionary = PyDictionary()
 		self.determiner_tags = ['WDT', 'WP', 'WRB']
-		self.entity_tags = ['NN', 'NNP', 'NNPS', 'NNS']
+		self.entity_tags = ['NN', 'NNP', 'NNPS', 'NNS', 'CD']
 		self.table_names = []
 
 		###have database somewhere that will store synonyms###
@@ -35,11 +35,21 @@ class Chatbot:
 			if userInput == "":
 				print "------Operation done successfully--------";
 				sys.exit(0)
+			result = "SELECT"
+
+			###find table name###
+			table_name = "COMPANY"
+
 			tagged_set = self.pos_extraction(userInput)
 			userInputEntity = self.search_for_entities(tagged_set)[0]
-			desired_column = self.find_closest_name(userInputEntity, self.column_names)
-			print desired_column
-
+			filtrationEntity = self.search_for_entities(tagged_set)[1]
+			filterName = self.retrieve_filter_names(filtrationEntity[0])
+			desired_result_column = self.find_closest_name(userInputEntity, self.column_names)
+			result += " " + desired_result_column  + " from " + table_name
+			if filterName is not None: 
+				result += " " + "WHERE " + str(filterName) + " = " + str(filtrationEntity[0])
+			print result
+			
 		
 	#############################################################################
 	# 1. WARM UP REPL 															#
@@ -77,6 +87,21 @@ class Chatbot:
 		conn.close()
 
 		return field_names
+
+	def retrieve_filter_names(self, filtrationEntity):
+		conn = sqlite3.connect('test.db')
+		print "------Opened database successfully-------";
+
+		filter_field = ""
+		cursor = conn.execute("SELECT * from COMPANY")
+		for row in cursor:
+			str_row = [str(elem) for elem in row]
+			if filtrationEntity in str_row:
+				filter_field = self.column_names[list(str_row).index(filtrationEntity)]
+				conn.close()
+				return filter_field
+
+		return None
 
 	def pos_extraction(self, userInput):
 		"""Retrieves the tags of each token in the input string and returns a list of tagged tokens."""		
@@ -150,12 +175,16 @@ class Chatbot:
 
 		return word_with_min_distance
 
-
 		#stems and then finds distances
 		# dl_distance_list = [self.dameraulevenshtein(self.porter_stemmer.stem(w1[0]), self.porter_stemmer.stem(w2)) for w2 in names_list]
 		# return names_list[dl_distance_list.index(min(dl_distance_list))]
 
-
+	def is_number(self, s):
+	    try:
+	        float(s)
+	        return True
+	    except ValueError:
+	        return False
 
 if __name__ == '__main__':
 	Chatbot()
