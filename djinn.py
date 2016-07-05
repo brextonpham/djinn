@@ -7,6 +7,7 @@ import sqlite3
 from porterstemmer import PorterStemmer
 from nltk.corpus import wordnet as wn
 from PyDictionary import PyDictionary
+from edit_distance import EditDistance
 
 #############################################################################
 # Chatbot						                            				#
@@ -18,13 +19,16 @@ class Chatbot:
 		self.name = 'Djinn'
 		self.porter_stemmer = PorterStemmer()
 		self.dictionary = PyDictionary()
+		self.edit_distance_functions = EditDistance()
 		self.determiner_tags = ['WDT', 'WP', 'WRB']
 		self.entity_tags = ['NN', 'NNP', 'NNPS', 'NNS', 'CD']
 		self.table_names = []
+		self.conn = sqlite3.connect('test.db')
 
 		###have database somewhere that will store synonyms###
 
 		###gather set for tables###
+
 		self.column_names = [name.lower() for name in self.retrieve_column_names()]		
 
 		print self.intro()
@@ -38,7 +42,15 @@ class Chatbot:
 			result = "SELECT"
 
 			###find table name###
+			
+			table_names = self.retrieve_table_names()
+
+			for name in table_names:
+				print self.strip_unicode_prefix(name[0])
 			table_name = "COMPANY"
+
+
+			
 
 			tagged_set = self.pos_extraction(userInput)
 			userInputEntity = self.search_for_entities(tagged_set)[0]
@@ -49,6 +61,8 @@ class Chatbot:
 			if filterName is not None: 
 				result += " " + "WHERE " + str(filterName) + " = " + str(filtrationEntity[0])
 			print result
+
+		self.conn.close()
 			
 		
 	#############################################################################
@@ -76,29 +90,26 @@ class Chatbot:
 	#############################################################################
 
 	def retrieve_column_names(self):
-		conn = sqlite3.connect('test.db')
-		print "------Opened database successfully-------";
-
-		cursor = conn.execute("SELECT * from COMPANY")
+		cursor = self.conn.execute("SELECT * from COMPANY")
 		#Get columns
 		num_fields = len(cursor.description) 
 		field_names = [i[0] for i in cursor.description]
 
-		conn.close()
-
 		return field_names
 
-	def retrieve_filter_names(self, filtrationEntity):
-		conn = sqlite3.connect('test.db')
-		print "------Opened database successfully-------";
+	def retrieve_table_names(self):
+		cursor = self.conn.cursor()
+		cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+		result = cursor.fetchall()
+		return result
 
+	def retrieve_filter_names(self, filtrationEntity):
 		filter_field = ""
-		cursor = conn.execute("SELECT * from COMPANY")
+		cursor = self.conn.execute("SELECT * from COMPANY")
 		for row in cursor:
 			str_row = [str(elem) for elem in row]
 			if filtrationEntity in str_row:
 				filter_field = self.column_names[list(str_row).index(filtrationEntity)]
-				conn.close()
 				return filter_field
 
 		return None
@@ -121,63 +132,32 @@ class Chatbot:
 	# 3. Additional helper functions							                #
 	#############################################################################
 
-	def dameraulevenshtein(self, seq1, seq2):
-	    """Calculate the Damerau-Levenshtein distance between sequences.
-
-	    This distance is the number of additions, deletions, substitutions,
-	    and transpositions needed to transform the first sequence into the
-	    second. Although generally used with strings, any sequences of
-	    comparable objects will work.
-
-	    Transpositions are exchanges of *consecutive* characters; all other
-	    operations are self-explanatory.
-	    """
-	    # Conceptually, this is based on a len(seq1) + 1 * len(seq2) + 1 matrix.
-	    # However, only the current and two previous rows are needed at once,
-	    # so we only store those.
-	    oneago = None
-	    thisrow = range(1, len(seq2) + 1) + [0]
-	    for x in xrange(len(seq1)):	    	        	        
-	        twoago, oneago, thisrow = oneago, thisrow, [0] * len(seq2) + [x + 1]
-	        for y in xrange(len(seq2)):
-	            delcost = oneago[y] + 1
-	            addcost = thisrow[y - 1] + 1
-	            subcost = oneago[y - 1] + (seq1[x] != seq2[y])
-	            thisrow[y] = min(delcost, addcost, subcost)
-	            # This block deals with transpositions
-	            if (x > 0 and y > 0 and seq1[x] == seq2[y - 1]
-	                and seq1[x-1] == seq2[y] and seq1[x] != seq2[y]):
-	                thisrow[y] = min(thisrow[y], twoago[y - 2] + 1)
-	    return thisrow[len(seq2) - 1]
-
 	def stem_user_input(self, userInputTokens):
 		return [self.porter_stemmer.stem(word) for word in userInputTokens]
 
-	def extract_tagged_antecedent(self, word):
+	def strip_unicode_prefix(self, word):
 		return str(word[:len(word)])
 
 	def find_synonyms(self, word):
-		return [self.extract_tagged_antecedent(w) for w in self.dictionary.synonym(word)]	
+		return [self.strip_unicode_prefix(w) for w in self.dictionary.synonym(word)]	
 	
 	def find_closest_name(self, w1, names_list):
 		###need to find hypernyms/hyponyms eventually####
 		possible_entity_titles_list = [w1[0]] + self.find_synonyms(w1[0])
 
 		###BRUTE FORCE BE BETTER BREXTON###
+		###CONSIDER STEMMING THEN DISTANCE###
 		word_with_min_distance = "" 
-		min_distance = self.dameraulevenshtein(possible_entity_titles_list[0], names_list[0])
+		min_distance = self.edit_distance_functions.dameraulevenshtein(possible_entity_titles_list[0], names_list[0])
+
 		for word in possible_entity_titles_list:
 			for name in names_list:
-				distance = self.dameraulevenshtein(word, name)
+				distance = self.edit_distance_functions.dameraulevenshtein(word, name)
 				if distance <= min_distance:
 					word_with_min_distance = name
 					min_distance = distance
 
 		return word_with_min_distance
-
-		#stems and then finds distances
-		# dl_distance_list = [self.dameraulevenshtein(self.porter_stemmer.stem(w1[0]), self.porter_stemmer.stem(w2)) for w2 in names_list]
-		# return names_list[dl_distance_list.index(min(dl_distance_list))]
 
 	def is_number(self, s):
 	    try:
