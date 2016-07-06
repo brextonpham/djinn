@@ -16,21 +16,16 @@ from edit_distance import EditDistance
 class Chatbot: 
 	"""Simple class to implement the chatbot for the NLI."""
 	def __init__(self):
+		self.conn = sqlite3.connect('djinn_tables_v0.db')
 		self.name = 'Djinn'
 		self.porter_stemmer = PorterStemmer()
 		self.dictionary = PyDictionary()
 		self.edit_distance_functions = EditDistance()
 		self.determiner_tags = ['WDT', 'WP', 'WRB']
 		self.entity_tags = ['NN', 'NNP', 'NNPS', 'NNS', 'CD']
-		self.table_names = []
-		self.conn = sqlite3.connect('test.db')
+		self.table_names = [self.strip_unicode_prefix(name[0]) for name in self.retrieve_table_names()]
 
 		###have database somewhere that will store synonyms###
-
-		###gather set for tables###
-
-		self.column_names = [name.lower() for name in self.retrieve_column_names()]		
-
 		print self.intro()
 		print self.greeting()
 		
@@ -41,23 +36,18 @@ class Chatbot:
 				sys.exit(0)
 			result = "SELECT"
 
-			###find table name###
-			
-			table_names = self.retrieve_table_names()
-
-			for name in table_names:
-				print self.strip_unicode_prefix(name[0])
-			table_name = "COMPANY"
-
-
-			
-
 			tagged_set = self.pos_extraction(userInput)
 			userInputEntity = self.search_for_entities(tagged_set)[0]
+			self.desired_table_name = self.find_closest_name(userInputEntity, self.table_names)
+			self.column_names = [name.lower() for name in self.retrieve_column_names(self.desired_table_name)]	
+
+			print self.table_names
+			print self.column_names
+				
 			filtrationEntity = self.search_for_entities(tagged_set)[1]
-			filterName = self.retrieve_filter_names(filtrationEntity[0])
+			filterName = self.retrieve_filter_names(filtrationEntity[0], self.desired_table_name)
 			desired_result_column = self.find_closest_name(userInputEntity, self.column_names)
-			result += " " + desired_result_column  + " from " + table_name
+			result += " " + desired_result_column  + " from " + desired_table_name
 			if filterName is not None: 
 				result += " " + "WHERE " + str(filterName) + " = " + str(filtrationEntity[0])
 			print result
@@ -89,8 +79,8 @@ class Chatbot:
 	# 2. Extraction and Transformation											#
 	#############################################################################
 
-	def retrieve_column_names(self):
-		cursor = self.conn.execute("SELECT * from COMPANY")
+	def retrieve_column_names(self, table_name):
+		cursor = self.conn.execute("SELECT * from {}".format(table_name))
 		#Get columns
 		num_fields = len(cursor.description) 
 		field_names = [i[0] for i in cursor.description]
@@ -103,15 +93,14 @@ class Chatbot:
 		result = cursor.fetchall()
 		return result
 
-	def retrieve_filter_names(self, filtrationEntity):
+	def retrieve_filter_names(self, filtrationEntity, table_name):
 		filter_field = ""
-		cursor = self.conn.execute("SELECT * from COMPANY")
+		cursor = self.conn.execute("SELECT * from {}".format(table_name))
 		for row in cursor:
 			str_row = [str(elem) for elem in row]
 			if filtrationEntity in str_row:
 				filter_field = self.column_names[list(str_row).index(filtrationEntity)]
 				return filter_field
-
 		return None
 
 	def pos_extraction(self, userInput):

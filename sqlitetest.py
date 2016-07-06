@@ -1,14 +1,18 @@
+#!/usr/bin/python
+
 import sqlite3
 
-conn = sqlite3.connect('test.db')
+conn = sqlite3.connect('djinn_tables_v0.db')
 print "Opened database successfully";
 
-cursor = conn.execute("SELECT id, name, address, salary  from COMPANY")
-for row in cursor:
-   print "ID = ", row[0]
-   print "NAME = ", row[1]
-   print "ADDRESS = ", row[2]
-   print "SALARY = ", row[3], "\n"
+conn.execute('''CREATE TABLE USERS
+       (ID INT PRIMARY KEY     NOT NULL,
+       FIRST_NAME     TEXT    NOT NULL,
+       LAST_NAME      TEXT    NOT NULL,
+       EMAIL		  TEXT    NOT NULL,
+       NO_TEAMS       INT     NOT NULL);''')
 
-print "Operation done successfully";
+
+print "Table created successfully";
+
 conn.close()
