@@ -37,16 +37,17 @@ class Chatbot:
 			result = "SELECT"
 
 			tagged_set = self.pos_extraction(userInput)
-			userInputEntity = self.search_for_entities(tagged_set)[0]
-			self.desired_table_name = self.find_closest_name(userInputEntity, self.table_names)
-			self.column_names = [name.lower() for name in self.retrieve_column_names(self.desired_table_name)]	
+			print tagged_set
 
-			print self.table_names
-			print self.column_names
-				
+			userInputEntity = self.search_for_entities(tagged_set)[0]
+			print userInputEntity
+
+
+			desired_table_name = self.find_closest_name(userInputEntity, self.table_names)
+			column_names = [name.lower() for name in self.retrieve_column_names(desired_table_name)]	
 			filtrationEntity = self.search_for_entities(tagged_set)[1]
-			filterName = self.retrieve_filter_names(filtrationEntity[0], self.desired_table_name)
-			desired_result_column = self.find_closest_name(userInputEntity, self.column_names)
+			filterName = self.retrieve_filter_names(filtrationEntity[0], desired_table_name, column_names)
+			desired_result_column = self.find_closest_name(userInputEntity, column_names)
 			result += " " + desired_result_column  + " from " + desired_table_name
 			if filterName is not None: 
 				result += " " + "WHERE " + str(filterName) + " = " + str(filtrationEntity[0])
@@ -93,13 +94,13 @@ class Chatbot:
 		result = cursor.fetchall()
 		return result
 
-	def retrieve_filter_names(self, filtrationEntity, table_name):
+	def retrieve_filter_names(self, filtrationEntity, table_name, column_names):
 		filter_field = ""
 		cursor = self.conn.execute("SELECT * from {}".format(table_name))
 		for row in cursor:
 			str_row = [str(elem) for elem in row]
 			if filtrationEntity in str_row:
-				filter_field = self.column_names[list(str_row).index(filtrationEntity)]
+				filter_field = column_names[list(str_row).index(filtrationEntity)]
 				return filter_field
 		return None
 
